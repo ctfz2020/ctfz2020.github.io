@@ -2,7 +2,6 @@
 layout: defaults/page
 permalink: index.html
 narrow: true
-title: 欢迎来到c5fz的Blog
 ---
 
 <hr />

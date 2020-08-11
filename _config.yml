@@ -7,8 +7,8 @@ highlighter:      rouge
 excerpt_separator: <!--more-->
 
 # Config for your profile.
-title:            蜡笔小新            # Site title
-name:             ctfz            # Your name
+title:            欢迎来到ctfz的Blog  # Site title
+name:             ctfz                # Your name
 avatar:           /theme/img/avatar.jpg   # Path to an avatar image
 
 url: https://ctfz2020.github.io
