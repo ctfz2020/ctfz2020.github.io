@@ -1,11 +1,9 @@
 ---
-title: yarn平台resourceManager进程内存
+title: yarn服务resourceManager进程内存溢出
 tags:
   - Yarn
   - OOM
 ---
-
-最近kafka使用上遇到的坑不少,稍微总结下
 
 新搭建的yarn集群resourceManager进程几次发生内存泄漏问题, 调高内存只是延长内存溢出日期,并没有真正解决问题. <!--more-->
 
