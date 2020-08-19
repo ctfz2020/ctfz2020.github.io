@@ -8,7 +8,7 @@ narrow: true
 
 ### 最近的文章
 
-{% for post in site.posts limit:3 %}
+{% for post in site.posts limit:5 %}
 {% include components/post-card.html %}
 {% endfor %}
 
