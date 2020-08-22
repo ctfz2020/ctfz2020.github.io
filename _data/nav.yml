@@ -1,13 +1,10 @@
-- title: Home
+- title: 首页
   href: index.html
 
-- title: About
+- title: 关于
   href: about.html
 
-- title: Posts
+- title: 所有的文章
   href: list/posts.html
-
-- title: Documentation
-  href: list/projects.html
 
 
