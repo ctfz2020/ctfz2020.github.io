@@ -190,7 +190,7 @@ public class VectorMultipleColumnTest {
 
 ```
 
-这段代码中`columnA`和`columnB`都是固定长度的数组, 模拟druid代码中的`long[] vector`,  测试方法有两个, 第一个`testTowLoopSum`方法模拟druid代码中的方式, 另一个方法`testVectorSum`借助临时数组完成向量化计算, 以触发SIMD优化(详情可看[JAVA向量化计算](vector.html))
+这段代码中`columnA`和`columnB`都是固定长度的数组, 模拟druid代码中的`long[] vector`,  测试方法有两个, 第一个`testTowLoopSum`方法模拟druid代码中的方式, 另一个方法`testVectorSum`借助临时数组完成向量化计算, 以触发SIMD优化(详情可看[JAVA向量化计算](../07/vector.html))
 
 执行结果如下:
 
