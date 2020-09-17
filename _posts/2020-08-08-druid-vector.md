@@ -80,7 +80,7 @@ public void aggregate(
   }
 ```
 
-最早的查询逻辑是遍历每行数据, 将所有的指标字段都聚合一次, 改之后的向量化查询逻辑是每个字段获取一批数据, 按照指标字段依次求sum.
+普通的查询逻辑是遍历每行数据, 将每行数据中所有的指标字段都聚合一次, 改之后的向量化查询逻辑是每个字段获取一批数据, 按照指标字段依次聚合. 代码中的`long[] vector`数组就是取的一批数据.
 
 举个例子: 现在要聚合数据的第2~7行数据总共6条数据.
 
@@ -92,11 +92,107 @@ public void aggregate(
 
 附录是汇编代码. 里面并没有找到`vmovdqu`,`vpaddd`等SMID指令, 说明这个方法并没有优化.
 
-```shell
-  0x0000000002879022: vmovdqu ymm1,ymmword ptr [r11+rdi*8+10h]
-  0x0000000002879029: vpaddq  ymm1,ymm1,ymmword ptr [rdx+rdi*8+10h]
-  0x000000000287902f: vmovdqu ymmword ptr [rdx+rdi*8+10h],ymm1
+下面看一个微基准测试(之前这段代码没加上, 已经补充!)
+
+```java
+import java.util.concurrent.TimeUnit;
+
+import org.openjdk.jmh.annotations.Benchmark;
+import org.openjdk.jmh.annotations.BenchmarkMode;
+import org.openjdk.jmh.annotations.Fork;
+import org.openjdk.jmh.annotations.Measurement;
+import org.openjdk.jmh.annotations.Mode;
+import org.openjdk.jmh.annotations.OutputTimeUnit;
+import org.openjdk.jmh.annotations.Scope;
+import org.openjdk.jmh.annotations.Setup;
+import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.annotations.Threads;
+import org.openjdk.jmh.annotations.Warmup;
+import org.openjdk.jmh.infra.Blackhole;
+import org.openjdk.jmh.runner.Runner;
+import org.openjdk.jmh.runner.RunnerException;
+import org.openjdk.jmh.runner.options.Options;
+import org.openjdk.jmh.runner.options.OptionsBuilder;
+
+@BenchmarkMode(Mode.AverageTime)
+@OutputTimeUnit(TimeUnit.NANOSECONDS)
+@Warmup(iterations = 3)
+@Threads(1)
+@State(Scope.Thread)
+@Fork(value = 1, jvmArgs= {"-XX:+UnlockDiagnosticVMOptions", "-XX:+UseSuperWord", "-XX:CompileCommand=print,*VectorMultipleColumnTest.testVectorSum*"})
+@Measurement(iterations = 5, batchSize = -1, time = 10, timeUnit = TimeUnit.SECONDS)
+public class VectorMultipleColumnTest {
+	final int length = 512;
+	long[] columnA;
+	long[] columnB;
+	
+	@Setup
+	public void start() {
+		columnA = VectorTest.createLongArray(length);
+		columnB = VectorTest.createLongArray(length);
+	}
+	
+	/**
+	 * 利用变量tmpSum存放中间结果,依次累加A和B数组, 真实情况下每个字段都需要一个临时变量, 这里为了方便使用同一个
+	 * @param hole
+	 */
+	@Benchmark
+	public void testTowLoopSum(Blackhole hole) {
+		hole.consume(simpleLoopSum(columnA));
+		hole.consume(simpleLoopSum(columnB));
+	}
+	
+	//存放中间结果
+	long tmpSum = 0l;
+	public long simpleLoopSum(long[] columns) {
+		for(int i = 0; i < columns.length; i++) {
+			tmpSum += columns[i];
+		}
+		return tmpSum;
+	}
+	
+	/**
+	 * 利用数组tmpResult存放中间结果, 依次和数组A和数组B向量化计算,真实情况下应该是每个字段生成一个中间数组, 这里为了方便使用同一个
+	 * @param hole
+	 */
+	@Benchmark
+	public void testVectorSum(Blackhole hole) {
+		hole.consume(vectorSum(columnA));
+		hole.consume(vectorSum(columnB));
+	}
+	
+	//存放中间结果
+	long[] tmpResult = new long[512];
+	public long[] vectorSum(long[] columns) {
+		add(tmpResult, columns, 0, columns.length);
+		return tmpResult;
+	}
+    
+	private static void add(long[] tmp, long[] src, int from, int end) {
+		int offset = end - from;
+		for(int i = 0; i < offset; i++) {
+			tmp[i] += src[i];
+		}
+	}
+	
+	public static void main(String[] args) {
+		Options opt = new OptionsBuilder()
+				.include(VectorMultipleColumnTest.class.getSimpleName())
+				.build();
+		try {
+			new Runner(opt).run();
+		} catch (RunnerException e) {
+			e.printStackTrace();
+		}
+	}
+}
+
+
 ```
+
+这段代码中`columnA`和`columnB`都是固定长度的数组, 模拟druid代码中的`long[] vector`,  测试方法有两个, 第一个`testTowLoopSum`方法模拟druid代码中的方式, 另一个方法`testVectorSum`借助临时数组完成向量化计算, 以触发SIMD优化(详情可看[JAVA向量化计算](vector.html))
+
+执行结果如下:
 
 ![image-20200806182509804](/assets/vector-3.png)
 
@@ -106,7 +202,7 @@ VectorMultipleColumnTest.testTowLoopSum  avgt    5  339.785 ± 14.927  ns/op
 VectorMultipleColumnTest.testVectorSum   avgt    5  157.644 ±  1.520  ns/op
 ```
 
-微基准测试结果是很振奋人心的, 向量化求和比普通累加处理性能提高一倍以上. 当然, 对于数据库代码, 性能提升不是像测试代码这么简单修改的事情,  但在符合业务需求的情况下,可以进行相关优化.
+微基准测试结果是很振奋人心的, 向量化求和比普通累加处理性能提高一倍以上. 当然, 对于数据库代码, 性能提升不是像测试代码这么简单修改的事情,  但在特定的情况下,还是存在优化的可能性.
 
 ### 结论
 

@@ -6,7 +6,7 @@ narrow: true
 
 <hr />
 
-### 最近的文章
+### 最近5篇文章
 
 {% for post in site.posts limit:5 %}
 {% include components/post-card.html %}
